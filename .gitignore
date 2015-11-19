@@ -1,3 +1,8 @@
 repdata-peer2_doc-pd01016005curr.pdf
 weather.csv.bz2
-
+.RData
+.Rhistory
+.RDataTmp
+StormReport_cache/
+stormDataFile
+weather.rds

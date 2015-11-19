@@ -1,0 +1,59 @@
+---
+title: "Public Health and Economic Impact of Severe Weather Events in the U.S."
+author: "Amade Annissimo"
+date: "November 18, 2015"
+output: html_document
+---
+
+## Synopsis
+
+## Data processing
+
+Dataset for the analysis comes from the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database.
+
+```{r, echo=TRUE, cache = TRUE}
+
+stormDataFile <- "weather.rds"
+
+if(!file.exists(stormDataFile)) {
+    fileUrl <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+    destFile <- "weather.csv.bz2"
+    download.file(fileUrl, destfile = destFile, method = "curl")
+    storm <- read.csv(destFile)
+    saveRDS(storm,stormDataFile)
+    }
+storm <- readRDS(stormDataFile)
+```
+
+The data set consist of `r ncol(storm)` variables and `r format(nrow(storm), big.mark=",", scientific=FALSE)` observations.
+
+Data processing is initially performed on a random sample of 1000 observation for faster processing. At the later stage, preprocessing methods will be applied to the entire dataset.
+
+```{r, echo=TRUE, cache = TRUE}
+set.seed(1000)
+stormSample <- storm[sample(nrow(storm), 1000), ]
+```
+
+Use the 'purrr' package to convert the factor to charaters for easier processing.
+
+
+```{r, echo=TRUE}
+library(purrr)
+stormSample %>% map_if(is.factor, as.character) -> stormSample
+```
+
+Store remove 'remarks' variable from the main dataset for easier processing and store it to a separete variable
+
+```{r, echo=TRUE}
+remarks <- stormSample$REMARKS
+library(dplyr, warn.conflicts = FALSE) # supress the messages on conflicst in variables
+stormSample <- select(stormSample, -REMARKS)
+```
+
+Dates were preprocessed using the 'lubridate' library.
+
+```{r, echo=FALSE}
+str(stormSample)
+```
+
+## Results
