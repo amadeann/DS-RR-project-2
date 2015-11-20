@@ -49,11 +49,26 @@ remarks <- stormSample$REMARKS
 library(dplyr, warn.conflicts = FALSE) # supress the messages on conflicst in variables
 stormSample <- select(stormSample, -REMARKS)
 ```
-
-Dates were preprocessed using the 'lubridate' library.
-
-```{r, echo=FALSE}
-str(stormSample)
+Remove other variables which won't be used in the analysis
+```{r, echo=TRUE}
+#WFO - weather forecast office
+stormSample <- select(stormSample, -c(ZONENAMES, BGN_TIME, END_TIME, TIME_ZONE,
+                                      STATE__, COUNTY, COUNTYNAME, BGN_RANGE,
+                                      BGN_AZI, BGN_LOCATI, COUNTY_END, COUNTYENDN,
+                                      END_RANGE, END_AZI, END_LOCATI, LENGTH,
+                                      WIDTH, WFO))
 ```
+
+Dates were processed using the 'lubridate' package.
+
+```{r, echo=TRUE}
+library(lubridate)
+stormSample <- stormSample %>% mutate(
+    BGN_DATE = as.Date(mdy_hms(stormSample$BGN_DATE)),
+    END_DATE = as.Date(mdy_hms(stormSample$END_DATE))
+    )
+```
+
+Chect the number of events (all types), by year, to see if a cutoff at 1996 is possible.
 
 ## Results
