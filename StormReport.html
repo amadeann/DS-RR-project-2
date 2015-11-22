@@ -73,7 +73,10 @@ img {
 </div>
 <div id="data-processing" class="section level2">
 <h2>Data processing</h2>
+<div id="dataset-overview-and-variable-selection" class="section level3">
+<h3>Dataset overview and variable selection</h3>
 <p>Dataset for the analysis comes from the U.S. National Oceanic and Atmospheric Administration’s (NOAA) storm database.</p>
+<p>The following commands have been used to load the dataset to a ‘storm’ data frame.</p>
 <pre class="r"><code>stormDataFile &lt;- &quot;weather.rds&quot;
 
 if(!file.exists(stormDataFile)) {
@@ -85,33 +88,105 @@ if(!file.exists(stormDataFile)) {
     }
 storm &lt;- readRDS(stormDataFile)</code></pre>
 <p>The data set consist of 37 variables and 902,297 observations.</p>
-<p>Data processing is initially performed on a random sample of 1000 observation for faster processing. At the later stage, preprocessing methods will be applied to the entire dataset.</p>
-<pre class="r"><code>set.seed(1000)
-stormSample &lt;- storm[sample(nrow(storm), 1000), ]</code></pre>
-<p>Use the ‘purrr’ package to convert the factor to charaters for easier processing.</p>
-<pre class="r"><code>library(purrr)
-stormSample %&gt;% map_if(is.factor, as.character) -&gt; stormSample</code></pre>
-<p>Store remove ‘remarks’ variable from the main dataset for easier processing and store it to a separete variable</p>
-<pre class="r"><code>remarks &lt;- stormSample$REMARKS
+<pre class="r"><code>set.seed(100)
+stormSample &lt;- storm[sample(nrow(storm), 10000), ]</code></pre>
+<p>Variables which are not used in the analysis were removed from the dataset.</p>
+<pre class="r"><code>library(plyr, warn.conflicts = FALSE) # 'plyr' package is used later in the analysis
 library(dplyr, warn.conflicts = FALSE) # supress the messages on conflicst in variables
-stormSample &lt;- select(stormSample, -REMARKS)</code></pre>
-<p>Remove other variables which won’t be used in the analysis</p>
-<pre class="r"><code>#WFO - weather forecast office
 stormSample &lt;- select(stormSample, -c(ZONENAMES, BGN_TIME, END_TIME, TIME_ZONE,
                                       STATE__, COUNTY, COUNTYNAME, BGN_RANGE,
                                       BGN_AZI, BGN_LOCATI, COUNTY_END, COUNTYENDN,
                                       END_RANGE, END_AZI, END_LOCATI, LENGTH,
-                                      WIDTH, WFO))</code></pre>
-<p>Dates were processed using the ‘lubridate’ package.</p>
-<pre class="r"><code>library(lubridate)
+                                      WIDTH, WFO, F, MAG, STATEOFFIC,
+                                      LATITUDE, LONGITUDE, LATITUDE_E, LONGITUDE_)
+                      )</code></pre>
+</div>
+<div id="variable-cleanup-and-observation-selection" class="section level3">
+<h3>Variable cleanup and observation selection</h3>
+<div id="conversion-of-factor-variables-to-character-variables" class="section level4">
+<h4>Conversion of factor variables to character variables</h4>
+<p>For easier preprocessing, ‘purrr’ package has been used to convert factor to charater variables.</p>
+<pre class="r"><code>library(purrr, warn.conflicts = FALSE) # supress the messages on conflicst in variables
+stormSample %&gt;% map_if(is.factor, as.character) -&gt; stormSample</code></pre>
+<p>‘REMARKS’ variable has been stored in a separate data frame along with event’s reference number and removed from the main dataset for easier processing.</p>
+<pre class="r"><code>remarks &lt;- data.frame(REFNUM = stormSample$REFNUM,REMARKS = stormSample$REMARKS)
+stormSample &lt;- select(stormSample, -REMARKS)</code></pre>
+</div>
+<div id="conversion-of-date-variables-to-date-type" class="section level4">
+<h4>Conversion of ‘date’ variables to ‘date’ type</h4>
+<p>Date variables (BGN_DATE and END_DATE) were processed using the ‘lubridate’ package.</p>
+<pre class="r"><code>library(lubridate, warn.conflicts = FALSE)
 stormSample &lt;- stormSample %&gt;% mutate(
     BGN_DATE = as.Date(mdy_hms(stormSample$BGN_DATE)),
     END_DATE = as.Date(mdy_hms(stormSample$END_DATE))
     )</code></pre>
-<p>Chect the number of events (all types), by year, to see if a cutoff at 1996 is possible.</p>
+</div>
+<div id="exclusion-of-pre-1996-observations" class="section level4">
+<h4>Exclusion of pre-1996 observations</h4>
+<p>The first event in the original dataset started on 1950-02-12 and last event finished on 2011-11-29.</p>
+<p>Observations before year 1996 have been excluded from the sample, as they do not contain information on all 48 weather event types tracked since that date. Previously only the data on tornado (since 1950), thunderstorm (since 1955), wind (since 1955) and hail (since 1955) events were recorded. More information on event type recording is availabilie on <a href="https://www.ncdc.noaa.gov/stormevents/details.jsp?type=eventtype" title="NCDC">NCDN website</a>.</p>
+<pre class="r"><code>removedObsCount &lt;- sum(year(stormSample$BGN_DATE) &lt; 1996) # Count of the observations remoded
+removedObsPerc &lt;- (sum(year(stormSample$BGN_DATE) &lt; 1996)/
+                       nrow(stormSample))*100 # Percentage share of the observations removed
+stormSample &lt;- stormSample[!(stormSample$BGN_DATE &lt; 1996),]</code></pre>
+<p>As a result of this procedure, 2,734 observations (27.3 %) were removed from the sample. Have the observations not been removed, measurments of the global public health and economic impact of a particular event type would be underestimating the effects of events recorded only since 1996.</p>
+</div>
+<div id="rocoding-variables-measuring-the-monetary-effects" class="section level4">
+<h4>Rocoding variables measuring the monetary effects</h4>
+<p>Four variables measuring the magnitude of property (PROPDMG, PROPDMGEXP) and crop damages (CROPDMG, CROPDMGEXP) have been recoded into two variables - PROPDMG and CROPDMG. In order to do that, variables PROPDMGEXP and CROPDMGEXP have been cleaned up from values different than “K”, “M” and “B” (ignoring case) and recoded to their numeric equivalents (representing thousands, millions and billions respectively). In the next step PROPDMG and CROPDMG variables have been multiplied by them.</p>
+<pre class="r"><code>stormSample &lt;- mutate(stormSample, PROPDMGEXP = toupper(PROPDMGEXP), CROPDMGEXP = toupper(CROPDMGEXP))
+stormSample$PROPDMGEXP[!(stormSample$PROPDMGEXP %in% c(&quot;K&quot;, &quot;M&quot;, &quot;B&quot;))] &lt;- 1
+stormSample$CROPDMGEXP[!(stormSample$CROPDMGEXP %in% c(&quot;K&quot;, &quot;M&quot;, &quot;B&quot;))] &lt;- 1
+
+stormSample$PROPDMGEXP &lt;- as.numeric(mapvalues(
+    stormSample$PROPDMGEXP, from = c(&quot;K&quot;, &quot;M&quot;, &quot;B&quot;), to = c(1000,1000000,1000000000)))</code></pre>
+<pre><code>## The following `from` values were not present in `x`: B</code></pre>
+<pre class="r"><code>stormSample$CROPDMGEXP &lt;- as.numeric(mapvalues(
+    stormSample$CROPDMGEXP, from = c(&quot;K&quot;, &quot;M&quot;, &quot;B&quot;), to = c(1000,1000000,1000000000)))</code></pre>
+<pre><code>## The following `from` values were not present in `x`: B</code></pre>
+<pre class="r"><code>stormSample$PROPDMG &lt;- (stormSample$PROPDMG * stormSample$PROPDMGEXP)
+stormSample$CROPDMG &lt;- (stormSample$CROPDMG * stormSample$CROPDMGEXP)
+
+stormSample &lt;- select(stormSample, -c(PROPDMGEXP, CROPDMGEXP))
+
+options(scipen=999) # disable scientific notation</code></pre>
+</div>
+<div id="recoding-variables-describing-the-event-type" class="section level4">
+<h4>Recoding variables describing the event type</h4>
+<p>As mentioned previously, National Weather Service records 48 different types of weather events (<a href="https://www.ncdc.noaa.gov/stormevents/details.jsp?type=eventtype" title="NCDC">NCDC</a>). In the unprocessed form, <em>EVTYPE</em> vatiable, representing the event type has 106 unique values.</p>
+<pre class="r"><code>length(unique(stormSample$EVTYPE))</code></pre>
+<pre><code>## [1] 106</code></pre>
+<p>After conversion of all values of <em>EVTYPE</em> to upper case, number of unique event types decreased to 105</p>
+<pre class="r"><code>stormSample$EVTYPE &lt;- toupper(stormSample$EVTYPE)
+length(unique(stormSample$EVTYPE))</code></pre>
+<pre><code>## [1] 105</code></pre>
+<p>In the next processing step, naming convention of the event types has been unified by correcting 3 types of inconstintencies with the event types names specified in the <a href="http://www.ncdc.noaa.gov/stormevents/pd01016005curr.pdf" title="NWS Directive 10-1605">NWS Directive 10-1605</a>:</p>
+<ul>
+<li>abbreviations have been expanded (e.g. ‘TSTM’ to ‘THUNDERSTORM’)</li>
+<li>typhographical errors have been corrected (e.g. ‘AVALANCE’ to ‘AVALANCHE’)</li>
+<li>non-standard descriptions (i.e. different thatn in the NWS Directive 10-1605) have been standardized (e.g. ‘FLOODING’ to ‘FLOOD’)</li>
+</ul>
+</div>
+</div>
+<div id="mini-data-dictionary" class="section level3">
+<h3>Mini data dictionary</h3>
+<p>Variables:</p>
+<ul>
+<li><em>BGN_DATE</em> - represents the date when the event started</li>
+<li><em>STATE</em> - represents the U.S. state or teritorry when the event took place</li>
+</ul>
+</div>
 </div>
 <div id="results" class="section level2">
 <h2>Results</h2>
+<div id="measuring-public-health-impact" class="section level3">
+<h3>Measuring public health impact</h3>
+<p>Measurment of the public health impact has been limited to measuring the number of injuries and deaths related to the weather event.</p>
+</div>
+<div id="measuring-economic-impact" class="section level3">
+<h3>Measuring economic impact</h3>
+<p>Measurment of the economic impact has been limited to measuring the crop and property damage in dollar terms.</p>
+</div>
 </div>
 
 
