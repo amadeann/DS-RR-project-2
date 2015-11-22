@@ -1,17 +1,29 @@
 ---
 title: "Public Health and Economic Impact of Severe Weather Events in the U.S."
-author: "Amade Annissimo"
-date: "November 18, 2015"
+author: "Amade A."
+date: "November 22, 2015"
 output: html_document
 ---
 
 ## Synopsis
 
+The goal of the paper is identification of extreme weather events which are:
+
+1. most harmful with respect to pupulation health
+2. causing the greatest negative economic consequences
+
+in the United States and their dependent territories.
+
+Analysis was performed on the dataset based on [U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database][3], limiting the analysis period to events which have occured between January 1996 and November 2011. Raw dataset have been preprecossed to obtain a tidy dataset, which included 8 variables and 836,984 observations, distinguishing 48 individual severe weather event types.  
+Impact on the population health have been approximated by the counts of injuries and deaths caued by each weather event type. Economic consequences were measured with property and crop damage expressed in United States dollar.  
+In the course of the analysis, it has been determined that the severe weather event with the strongest negative impact was tornado. In the analyzed period tornados resulted in 2,535 deaths and 44,153 injuries (21.9% and 48.7% of all deaths and injuries respectively).  
+In terms of economic impact, the combined damages to property and crops were the highest as a result of hurricanes. Between January 1996 and November 2011 this type of weather events caused $90.9bln in damages (31.3 % of all damages).
+
 ## Data processing
 
 ### Dataset overview and variable selection
 
-Dataset for the analysis comes from the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database.
+Dataset for the analysis was based on the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database.
 
 The following commands have been used to load the dataset to a 'storm' data frame.
 ```{r, echo=TRUE, cache = TRUE}
@@ -27,25 +39,20 @@ if(!file.exists(stormDataFile)) {
     }
 storm <- readRDS(stormDataFile)
 ```
+Dataset is downloaded from the source website only if id does not already exist in the working directory. Raw CSV files is read into R using read.csv() function and subsequently stored to RDS file for faster dataset load in future code runs.
 
-The data set consist of `r ncol(storm)` variables and `r format(nrow(storm), big.mark=",", scientific=FALSE)` observations.
-
-```{r, echo=TRUE, cache = TRUE}
-set.seed(100)
-stormSample <- storm[sample(nrow(storm), 10000), ]
-```
-
+The raw data set consist of `r ncol(storm)` variables and `r format(nrow(storm), big.mark=",", scientific=FALSE)` observations.
 
 Variables which are not used in the analysis were removed from the dataset.
 
 ```{r, echo=TRUE}
 library(plyr, warn.conflicts = FALSE) # 'plyr' package is used later in the analysis
 library(dplyr, warn.conflicts = FALSE) # supress the messages on conflicst in variables
-stormSample <- select(stormSample, -c(ZONENAMES, BGN_TIME, END_TIME, TIME_ZONE,
+storm <- select(storm, -c(ZONENAMES, BGN_TIME, END_TIME, TIME_ZONE,
                                       STATE__, COUNTY, COUNTYNAME, BGN_RANGE,
                                       BGN_AZI, BGN_LOCATI, COUNTY_END, COUNTYENDN,
                                       END_RANGE, END_AZI, END_LOCATI, LENGTH,
-                                      WIDTH, WFO, F, MAG, STATEOFFIC,
+                                      WIDTH, WFO, F, MAG, STATEOFFIC, STATE,
                                       LATITUDE, LONGITUDE, LATITUDE_E, LONGITUDE_)
                       )
 ```
@@ -58,14 +65,14 @@ For easier preprocessing, 'purrr' package has been used to convert factor to cha
 
 ```{r, echo=TRUE}
 library(purrr, warn.conflicts = FALSE) # supress the messages on conflicst in variables
-stormSample %>% map_if(is.factor, as.character) -> stormSample
+storm %>% map_if(is.factor, as.character) -> storm
 ```
 
-'REMARKS' variable has been stored in a separate data frame along with event's reference number and removed from the main dataset for easier processing.
+'REMARKS' variable has been stored in a separate data frame along with event's reference number and removed from the main dataset for faster processing.
 
 ```{r, echo=TRUE}
-remarks <- data.frame(REFNUM = stormSample$REFNUM,REMARKS = stormSample$REMARKS)
-stormSample <- select(stormSample, -REMARKS)
+remarks <- data.frame(REFNUM = storm$REFNUM,REMARKS = storm$REMARKS)
+storm <- select(storm, -REMARKS)
 ```
 
 #### Conversion of 'date' variables to 'date' type
@@ -74,85 +81,335 @@ Date variables (BGN_DATE and END_DATE) were processed using the 'lubridate' pack
 
 ```{r, echo=TRUE}
 library(lubridate, warn.conflicts = FALSE)
-stormSample <- stormSample %>% mutate(
-    BGN_DATE = as.Date(mdy_hms(stormSample$BGN_DATE)),
-    END_DATE = as.Date(mdy_hms(stormSample$END_DATE))
+storm <- storm %>% mutate(
+    BGN_DATE = as.Date(mdy_hms(storm$BGN_DATE)),
+    END_DATE = as.Date(mdy_hms(storm$END_DATE))
     )
 ```
 
 #### Exclusion of pre-1996 observations
 
-The first event in the original dataset started on `r min(stormSample$BGN_DATE)` and last event finished on `r max(stormSample$BGN_DATE)`.
+The first event in the original dataset started on `r min(storm$BGN_DATE)` and last event finished on `r max(storm$BGN_DATE)`.
 
 Observations before year 1996 have been excluded from the sample, as they do not contain information on all 48 weather event types tracked since that date. Previously only the data on tornado (since 1950), thunderstorm (since 1955), wind (since 1955) and hail (since 1955) events were recorded. More information on event type recording is availabilie on [NCDN website][1]. 
 ```{r, echo=TRUE}
-removedObsCount <- sum(year(stormSample$BGN_DATE) < 1996) # Count of the observations remoded
-removedObsPerc <- (sum(year(stormSample$BGN_DATE) < 1996)/
-                       nrow(stormSample))*100 # Percentage share of the observations removed
-stormSample <- stormSample[!(stormSample$BGN_DATE < 1996),]
+removedObsCount <- sum(year(storm$BGN_DATE) < 1996) # Count of the observations remoded
+removedObsPerc <- (sum(year(storm$BGN_DATE) < 1996)/
+                       nrow(storm))*100 # Percentage share of the observations removed
+storm <- storm[!(storm$BGN_DATE < 1996),]
 ```
 
 As a result  of this procedure, `r format(removedObsCount, big.mark=",", scientific=FALSE)` observations (`r sprintf("%.1f %%", removedObsPerc)`) were removed from the sample. Have the observations not been removed, measurments of the global public health and economic impact of a particular event type would be underestimating the effects of events recorded only since 1996.
+
+In addition to the time-range limitation described above, *END_DATE* variable has been removed from the sample, as it is not necessary for the analysis.
 
 #### Rocoding variables measuring the monetary effects
 
 Four variables measuring the magnitude of property (PROPDMG, PROPDMGEXP) and crop damages (CROPDMG, CROPDMGEXP)  have been recoded into two variables - PROPDMG and CROPDMG. In order to do that,  variables PROPDMGEXP and CROPDMGEXP have been cleaned up from values different than "K", "M" and "B" (ignoring case) and recoded to their numeric equivalents (representing thousands, millions and billions respectively). In the next step PROPDMG and CROPDMG variables have been multiplied by them.
 
 ```{r, echo=TRUE}
-stormSample <- mutate(stormSample, PROPDMGEXP = toupper(PROPDMGEXP), CROPDMGEXP = toupper(CROPDMGEXP))
-stormSample$PROPDMGEXP[!(stormSample$PROPDMGEXP %in% c("K", "M", "B"))] <- 1
-stormSample$CROPDMGEXP[!(stormSample$CROPDMGEXP %in% c("K", "M", "B"))] <- 1
+storm <- mutate(storm, PROPDMGEXP = toupper(PROPDMGEXP), CROPDMGEXP = toupper(CROPDMGEXP))
+storm$PROPDMGEXP[!(storm$PROPDMGEXP %in% c("K", "M", "B"))] <- 1
+storm$CROPDMGEXP[!(storm$CROPDMGEXP %in% c("K", "M", "B"))] <- 1
 
-stormSample$PROPDMGEXP <- as.numeric(mapvalues(
-    stormSample$PROPDMGEXP, from = c("K", "M", "B"), to = c(1000,1000000,1000000000)))
-stormSample$CROPDMGEXP <- as.numeric(mapvalues(
-    stormSample$CROPDMGEXP, from = c("K", "M", "B"), to = c(1000,1000000,1000000000)))
+storm$PROPDMGEXP <- as.numeric(mapvalues(
+    storm$PROPDMGEXP, from = c("K", "M", "B"), to = c(1000,1000000,1000000000)))
+storm$CROPDMGEXP <- as.numeric(mapvalues(
+    storm$CROPDMGEXP, from = c("K", "M", "B"), to = c(1000,1000000,1000000000)))
 
-stormSample$PROPDMG <- (stormSample$PROPDMG * stormSample$PROPDMGEXP)
-stormSample$CROPDMG <- (stormSample$CROPDMG * stormSample$CROPDMGEXP)
+storm$PROPDMG <- (storm$PROPDMG * storm$PROPDMGEXP)
+storm$CROPDMG <- (storm$CROPDMG * storm$CROPDMGEXP)
 
-stormSample <- select(stormSample, -c(PROPDMGEXP, CROPDMGEXP))
+storm <- select(storm, -c(PROPDMGEXP, CROPDMGEXP))
 
 options(scipen=999) # disable scientific notation
 ```
 
 #### Recoding variables describing the event type
 
-As mentioned previously, National Weather Service records 48 different types of weather events ([NCDC][1]). In the unprocessed form, *EVTYPE* vatiable, representing the event type has `r length(unique(stormSample$EVTYPE))` unique values.
+As mentioned previously, National Weather Service records 48 different types of weather events ([NCDC][1]). In the unprocessed form, *EVTYPE* vatiable, representing the event type has `r length(unique(storm$EVTYPE))` unique values.
 
 ```{r, echo=TRUE}
-length(unique(stormSample$EVTYPE))
+length(unique(storm$EVTYPE))
 ```
 
-After conversion of all values of *EVTYPE* to upper case, number of unique event types decreased to `r length(unique(toupper(stormSample$EVTYPE)))`
+After conversion of all values of *EVTYPE* variable to upper case, number of unique event types decreased to `r length(unique(toupper(storm$EVTYPE)))`
 
 ```{r, echo=TRUE}
-stormSample$EVTYPE <- toupper(stormSample$EVTYPE)
-length(unique(stormSample$EVTYPE))
+storm$EVTYPE <- toupper(storm$EVTYPE)
+length(unique(storm$EVTYPE))
 ```
 
-In the next processing step, naming convention of the event types has been unified by correcting 3 types of inconstintencies with the event types names specified in the [NWS Directive 10-1605][2]:
+In the next processing step, event descriptions in the *EVTYPE* variable have been mapped to all 48 event types specified in the [NWS Directive 10-1605][2] using the 'gsub' function. Oservations with event descriptions which could not been matched to an appropriate event have been removed from the dataset.
 
-- abbreviations have been expanded (e.g. 'TSTM' to 'THUNDERSTORM')
-- typhographical errors have been corrected (e.g. 'AVALANCE' to 'AVALANCHE')
-- non-standard descriptions (i.e. different thatn in the NWS Directive 10-1605) have been standardized (e.g. 'FLOODING' to 'FLOOD')
+```{r, echo=TRUE}
+storm$EVTYPE <- gsub("TSTM","THUNDERSTORM",storm$EVTYPE, ignore.case = TRUE)
+storm$EVTYPE <- gsub("FLD","FLOOD",storm$EVTYPE, ignore.case = TRUE)
 
-### Mini data dictionary
+rowsBeforeEventCleanup <- nrow(storm)
+# Astronomical Low Tide 
+storm$EVTYPE <- gsub(".*Astronomical Low Tide.*","Astronomical Low Tide",storm$EVTYPE, ignore.case = TRUE)
+# Avalanche
+storm$EVTYPE <- gsub(".*Avalanche.*","Avalanche",storm$EVTYPE, ignore.case = TRUE)
+storm$EVTYPE <- gsub(".*Avalance.*","Avalanche",storm$EVTYPE, ignore.case = TRUE)
+# Blizzard
+storm$EVTYPE <- gsub(".*Blizzard.*","Blizzard",storm$EVTYPE, ignore.case = TRUE)
+#Coastal Flood 
+storm$EVTYPE <- gsub(".*Coastal Flood.*","Coastal Flood",storm$EVTYPE, ignore.case = TRUE)
+#Cold/Wind Chill
+storm$EVTYPE <- gsub(".*Cold/Wind Chill.*","Cold/Wind Chill",storm$EVTYPE, ignore.case = TRUE)
+storm$EVTYPE <- gsub("^Cold$","Cold/Wind Chill",storm$EVTYPE, ignore.case = TRUE)
+#Debris Flow
+storm$EVTYPE <- gsub(".*Debris Flow.*","Debris Flow",storm$EVTYPE, ignore.case = TRUE)
+#Dense Fog
+storm$EVTYPE <- gsub(".*Dense Fog.*","Dense Fog",storm$EVTYPE, ignore.case = TRUE)
+#Dense Smoke
+storm$EVTYPE <- gsub(".*Dense Smoke.*","Dense Smoke",storm$EVTYPE, ignore.case = TRUE)
+#Drought
+storm$EVTYPE <- gsub(".*Drought.*","Drought",storm$EVTYPE, ignore.case = TRUE)
+#Dust Devil
+storm$EVTYPE <- gsub(".*Dust Devil.*","Dust Devil",storm$EVTYPE, ignore.case = TRUE)
+#Dust Storm
+storm$EVTYPE <- gsub(".*Dust Storm.*","Dust Storm",storm$EVTYPE, ignore.case = TRUE)
+#Excessive Heat
+storm$EVTYPE <- gsub(".*Excessive Heat.*","Excessive Heat",storm$EVTYPE, ignore.case = TRUE)
+storm$EVTYPE <- gsub(".*Record Heat.*","Excessive Heat",storm$EVTYPE, ignore.case = TRUE)
+#Extreme Cold/Wind Chill
+storm$EVTYPE <- gsub(".*Extreme.*Cold*","Extreme Cold/Wind Chill",storm$EVTYPE, ignore.case = TRUE)
+storm$EVTYPE <- gsub(".*Extreme.*Wind.*Chill.*","Extreme Cold/Wind Chill",storm$EVTYPE, ignore.case = TRUE)
+#Flash Flood
+storm$EVTYPE <- gsub(".*Flash Flood.*","Flash Flood",storm$EVTYPE, ignore.case = TRUE)
+#Flood
+storm$EVTYPE <- gsub("^Flood.*","Flood",storm$EVTYPE, ignore.case = TRUE)
+storm$EVTYPE <- gsub(".*Urban.*Flood.*","Flood",storm$EVTYPE, ignore.case = TRUE)
+#Freezing Fog
+storm$EVTYPE <- gsub(".*Freezing Fog.*","Freezing Fog",storm$EVTYPE, ignore.case = TRUE)
+#Frost/Freeze
+storm$EVTYPE <- gsub(".*Frost.*Freeze.*","Frost/Freeze",storm$EVTYPE, ignore.case = TRUE)
+#Funnel Cloud
+storm$EVTYPE <- gsub(".*Funnel.*","Funnel Cloud",storm$EVTYPE, ignore.case = TRUE)
+#Hail
+storm$EVTYPE <- gsub("^Hail.*","Hail",storm$EVTYPE, ignore.case = TRUE)
+#Heat
+storm$EVTYPE <- gsub("^Heat.*","Heat",storm$EVTYPE, ignore.case = TRUE)
+storm$EVTYPE <- gsub(".*Warm.*","Heat",storm$EVTYPE, ignore.case = TRUE)
+#Heavy Rain
+storm$EVTYPE <- gsub("*Heavy Rain.*","Heavy Rain",storm$EVTYPE, ignore.case = TRUE)
+#Heavy Snow
+storm$EVTYPE <- gsub(".*Heavy Snow.*","Heavy Snow",storm$EVTYPE, ignore.case = TRUE)
+#High Surf
+storm$EVTYPE <- gsub(".*High Surf.*","High Surf",storm$EVTYPE, ignore.case = TRUE)
+#High Wind
+storm$EVTYPE <- gsub("^High Wind.*","High Wind",storm$EVTYPE, ignore.case = TRUE)
+#Hurricane (Typhoon)
+storm$EVTYPE <- gsub(".*Hurricane.*","Hurricane",storm$EVTYPE, ignore.case = TRUE)
+storm$EVTYPE <- gsub(".*Typhoon.*","Hurricane",storm$EVTYPE, ignore.case = TRUE)
+#Ice Storm
+storm$EVTYPE <- gsub(".*Ice Storm.*","Ice Storm",storm$EVTYPE, ignore.case = TRUE)
+#Lake-Effect Snow"
+storm$EVTYPE <- gsub(".*Lake.Effect Snow.*","Lake-Effect Snow",storm$EVTYPE, ignore.case = TRUE)
+#Lakeshore Flood
+storm$EVTYPE <- gsub(".*Lakeshore Flood.*","Lakeshore Flood",storm$EVTYPE, ignore.case = TRUE)
+#Lightning
+storm$EVTYPE <- gsub(".*Lightning.*","Lightning",storm$EVTYPE, ignore.case = TRUE)
+#Marine Hail
+storm$EVTYPE <- gsub(".*Marine Hail.*","Marine Hail",storm$EVTYPE, ignore.case = TRUE)
+#Marine High Wind
+storm$EVTYPE <- gsub(".*Marine High Wind.*","Marine High Wind",storm$EVTYPE, ignore.case = TRUE)
+#Marine Strong Wind
+storm$EVTYPE <- gsub(".*Marine Strong Wind.*","Marine Strong Wind",storm$EVTYPE, ignore.case = TRUE)
+#Marine Thunderstorm Wind
+storm$EVTYPE <- gsub(".*Marine Thunderstorm Wind.*","Marine Thunderstorm Wind",storm$EVTYPE, ignore.case = TRUE)
+#Rip Current
+storm$EVTYPE <- gsub(".*Rip Current.*","Rip Current",storm$EVTYPE, ignore.case = TRUE)
+#Seiche
+storm$EVTYPE <- gsub(".*Seiche.*","Seiche",storm$EVTYPE, ignore.case = TRUE)
+#Sleet
+storm$EVTYPE <- gsub(".*Sleet.*","Sleet",storm$EVTYPE, ignore.case = TRUE)
+#Sneakerwave
+storm$EVTYPE <- gsub(".*Sneakerwave.*","Sneakerwave",storm$EVTYPE, ignore.case = TRUE)
+#Storm Surge/Tide
+storm$EVTYPE <- gsub(".*Storm Surge/Tide.*","Storm Surge/Tide",storm$EVTYPE, ignore.case = TRUE)
+#Strong Wind
+storm$EVTYPE <- gsub("^Strong Wind.*","Strong Wind",storm$EVTYPE, ignore.case = TRUE)
+#Thunderstorm Wind
+storm$EVTYPE <- gsub("^Thunderstorm Wind.*","Thunderstorm Wind",storm$EVTYPE, ignore.case = TRUE)
+#Tornado
+storm$EVTYPE <- gsub(".*Tornado.*","Tornado",storm$EVTYPE, ignore.case = TRUE)
+#Tropical Depression
+storm$EVTYPE <- gsub(".*Tropical Depression.*","Tropical Depression",storm$EVTYPE, ignore.case = TRUE)
+#Tropical Storm
+storm$EVTYPE <- gsub(".*Tropical Storm.*","Tropical Storm",storm$EVTYPE, ignore.case = TRUE)
+#Tsunami
+storm$EVTYPE <- gsub(".*Tsunami.*","Tsunami",storm$EVTYPE, ignore.case = TRUE)
+#Volcanic Ash
+storm$EVTYPE <- gsub(".*Volcanic Ash.*","Volcanic Ash",storm$EVTYPE, ignore.case = TRUE)
+#Waterspout
+storm$EVTYPE <- gsub(".*Waterspout.*","Waterspout",storm$EVTYPE, ignore.case = TRUE)
+#Wildfire
+storm$EVTYPE <- gsub(".*Wildfire.*","Wildfire",storm$EVTYPE, ignore.case = TRUE)
+#Winter Storm"
+storm$EVTYPE <- gsub("*Winter Storm*","Winter Storm",storm$EVTYPE, ignore.case = TRUE)
+#Winter Weather"
+storm$EVTYPE <- gsub(".*Winter Weather.*","Winter Weather",storm$EVTYPE, ignore.case = TRUE)
+
+# Convert event desctiptions to upper case
+
+storm$EVTYPE <- toupper(storm$EVTYPE)
+
+# Store all event descriptions to event variable
+
+events <- toupper(c("Astronomical Low Tide", "Avalanche", "Blizzard", "Coastal Flood", "Cold/Wind Chill", "Debris Flow", "Dense Fog", "Dense Smoke", "Drought", "Dust Devil", "Dust Storm", "Excessive Heat", "Extreme Cold/Wind Chill", "Flash Flood", "Flood", "Freezing Fog", "Frost/Freeze", "Funnel Cloud", "Hail", "Heat", "Heavy Rain", "Heavy Snow", "High Surf", "High Wind", "Hurricane", "Ice Storm", "Lake-Effect Snow", "Lakeshore Flood", "Lightning", "Marine Hail", "Marine High Wind", "Marine Strong Wind", "Marine Thunderstorm Wind", "Rip Current", "Seiche", "Sleet", "Sneakerwave", "Storm Surge/Tide", "Strong Wind", "Thunderstorm Wind", "Tornado", "Tropical Depression", "Tropical Storm", "Tsunami", "Volcanic Ash", "Waterspout","Wildfire", "Winter Storm", "Winter Weather"))
+removedInEventCleanup <- length(storm$EVTYPE[!(storm$EVTYPE %in% events)])
+
+# Remove observations referring to weather events not specified in the NWS Directive 10-1605
+
+storm <- storm[(storm$EVTYPE %in% events),]
+
+removedInEventCleanupPercentage <- (removedInEventCleanup/rowsBeforeEventCleanup)*100
+removedInEventCleanupPercentage
+```
+
+Ultimately, `r sprintf("%.1f %%", removedInEventCleanupPercentage)` of the observations in the analyzed epriod have been excluded from the dataset as a result of *EVTYPE* variable cleanup.
+
+### Tidy Dataset variable description
 
 Variables:
 
 - *BGN_DATE* - represents the date when the event started
-- *STATE* - represents the U.S. state or teritorry when the event took place
+- *EVTYPE* - one of the 48 severe weather event types
+- *FATALITIES* - deaths caused by the weather event
+- *INJURIES* - injuries caused by the weather event
+- *PROPDMG* - property damage caused by the weather event (in USD)
+- *CROPDMG* - crop damage caused by the weather event (in USD)
+- *REFNUM* - identification number of the individual weather event
+
+## Data analysis
+
+### Dataset summary
+
+```{r, echo = TRUE}
+tidyDatasetRow <- nrow(storm)
+tidyDatasetCol <- ncol(storm)
+```
+
+The tidy dataset has `r tidyDatasetCol` variables across `r format( tidyDatasetRow,big.mark=",",scientific=FALSE)` observations.
+
+10 most frequent weather events along with their shares are presented in the table below.
+
+```{r, echo = TRUE}
+storm %>% group_by(EVTYPE) %>% dplyr::summarize(count = length(EVTYPE), share = length(EVTYPE)/length(storm$EVTYPE)) %>% dplyr::arrange(desc(count)) %>% as.data.frame() %>% head(10)
+```
+
+```{r, echo = TRUE}
+globalDeathCount <- sum(storm$FATALITIES)
+globalInjuriesCount <- sum(storm$INJURIES)
+globalPropertyDamage <- sum(storm$PROPDMG)
+globalCropDamage <- sum(storm$CROPDMG)
+```
+
+### Outlier detection
+
+The following 4 tables each present 10 individual weather events with the most significant impact along with their reference numbers, which can be used to identify their narratives stored in the 'remarks' data frame.
+
+```{r, echo = TRUE}
+deathTop10Events <- storm %>% select(BGN_DATE, EVTYPE, FATALITIES, REFNUM) %>% dplyr::arrange(desc(FATALITIES)) %>% as.data.frame() %>% head(10)
+
+injuryTop10Events <- storm %>% select(BGN_DATE, EVTYPE, INJURIES, REFNUM) %>% dplyr::arrange(desc(INJURIES)) %>% as.data.frame() %>% head(10)
+
+propDmgTop10Events <- storm %>% select(BGN_DATE, EVTYPE, PROPDMG, REFNUM) %>% dplyr::arrange(desc(PROPDMG)) %>% as.data.frame() %>% head(10)
+
+cropDmgTop10Events <- storm %>% select(BGN_DATE, EVTYPE, CROPDMG, REFNUM) %>% dplyr::arrange(desc(CROPDMG)) %>% as.data.frame() %>% head(10)
+
+deathTop10Events
+injuryTop10Events
+propDmgTop10Events
+cropDmgTop10Events
+```
+
+As can be seen in the 'propDmgTop10Events' table, two events with reference numbers 605943 and 577615 show extronardily high property damages of $`r format(round(storm$PROPDMG[storm$REFNUM == 605943 ]/1000000000),big.mark=",",scientific=FALSE)`bln and $`r format(round(storm$PROPDMG[storm$REFNUM == 577615 ]/1000000000),big.mark=",",scientific=FALSE)`bln. In order to determine whether those values were recorded correctly, the descriptions of the events have been investigated.  
+Event 577615 refers to Hurricane Katrina, which justifies the recorded property damages. Property damages figure for the event 605943 however seems out of range based on the following event narrative:
+```{r, echo = TRUE}
+remarks[remarks$REFNUM == 605943,2]
+```
+As a result, in order to improve the data quality, property damages value for that event has been changed to 76mln (amount mentioned in the narrative).
+```{r, echo = TRUE}
+storm$PROPDMG[storm$REFNUM == 605943] <- 76000000
+```
+
+### Clean dataset summary
+
+Total number of deaths and injuries across all events equaled `r format(globalDeathCount,big.mark=",",scientific=FALSE)` and `r format(globalInjuriesCount,big.mark=",",scientific=FALSE)` respectively. In terms of economic impact all events in the tidy dataset (after correction of event id 605943) caused property and crop damages worth respectively $`r format(round(globalPropertyDamage/1000000000),big.mark=",",scientific=FALSE)`bln and $`r format(round(globalCropDamage/1000000000),big.mark=",",scientific=FALSE)`bln.
 
 ## Results
 
 ### Measuring public health impact
 
-Measurment of the public health impact has been limited to measuring the number of injuries and deaths related to the weather event.
+Measurment of a public health impact has been limited to measuring number of injuries and deaths related to a particular weather event.
+
+Graphs below show 10 types of severe weather events in terms of total number of deaths and injuries caused by them in the analyzed period.
+
+```{r, echo = TRUE}
+deathTop10EventTypes <- storm %>% group_by(EVTYPE) %>% dplyr::summarize(FATALITIES = sum(FATALITIES)) %>%  dplyr::arrange(desc(FATALITIES)) %>% as.data.frame() %>% head(10)
+
+injuryTop10EventTypes <- storm %>% group_by(EVTYPE) %>% dplyr::summarize(INJURIES = sum(INJURIES)) %>%  dplyr::arrange(desc(INJURIES)) %>% as.data.frame() %>% head(10)
+
+deathOtherEventTypes <- storm %>% group_by(EVTYPE) %>% dplyr::summarize(FATALITIES = sum(FATALITIES)) %>%  dplyr::arrange(desc(FATALITIES)) %>% as.data.frame() %>% tail(length(unique(storm$EVTYPE))-10)
+
+injuryOtherEventTypes <- storm %>% group_by(EVTYPE) %>% dplyr::summarize(INJURIES = sum(INJURIES)) %>%  dplyr::arrange(desc(INJURIES)) %>% as.data.frame() %>% tail(length(unique(storm$EVTYPE))-10)
+
+fatalitiesSummary <- rbind(
+    deathTop10EventTypes,
+    c("OTHER", sum(deathOtherEventTypes$FATALITIES))
+    )
+injuriesSummary <- rbind(
+    injuryTop10EventTypes,
+    c("OTHER", sum(injuryOtherEventTypes$INJURIES))
+    )
+```
+
+```{r fatalitiesByEventType}
+par(mar=c(5,12,4,2))
+barplot(as.numeric(fatalitiesSummary$FATALITIES[11:1]), main="Fatalities by event type", horiz=TRUE, names.arg=fatalitiesSummary$EVTYPE[11:1], las = 1)
+```
+```{r}
+```
+Based on the graph above, the most deadly severe weather event type in the analyzed period was `r fatalitiesSummary[1,1]` which caused `r format(as.numeric(fatalitiesSummary[1,2]), big.mark=",", scientific=FALSE)` deaths (`r sprintf("%.1f %%", as.numeric(fatalitiesSummary[1,2])/sum(as.numeric(fatalitiesSummary[,2]))*100)` of all deaths).
+```{r injuriesByEventType}
+par(mar=c(5,12,4,2))
+barplot(as.numeric(injuriesSummary$INJURIES[11:1]), main="Injuries by event type", horiz=TRUE, names.arg=injuriesSummary$EVTYPE[11:1], las = 1)
+```
+```{r}
+```
+In terms of injuries, the event type with the strongest impact was also `r injuriesSummary[1,1]` causing `r format(as.numeric(injuriesSummary[1,2]), big.mark=",", scientific=FALSE)` injuries (`r sprintf("%.1f %%", as.numeric(injuriesSummary[1,2])/sum(as.numeric(injuriesSummary[,2]))*100)` of all injuries).
+
+Summarizing the information from the two charts above, TORNADOES were the events causing the most negative population health impact.
 
 ### Measuring economic impact
 
-Measurment of the economic impact has been limited to measuring the crop and property damage in dollar terms.
+Measurment of an economic impact of a particular event has been limited to measuring crop and property damages in dollar terms.
+
+```{r, echo = TRUE}
+econImpTop10EventTypes <- storm %>% group_by(EVTYPE) %>% dplyr::summarize(ECONIMPACT = sum(PROPDMG) + sum(CROPDMG)) %>%  dplyr::arrange(desc(ECONIMPACT)) %>% as.data.frame() %>% head(10)
+
+econImpOtherEventTypes <- storm %>% group_by(EVTYPE) %>% dplyr::summarize(ECONIMPACT = sum(PROPDMG) + sum(CROPDMG)) %>%  dplyr::arrange(desc(ECONIMPACT)) %>% as.data.frame() %>% tail(length(unique(storm$EVTYPE))-10)
+
+econImpactSummary <- rbind(
+    econImpTop10EventTypes,
+    c("OTHER", sum(econImpOtherEventTypes$ECONIMPACT))
+    )
+```
+
+```{r economicImpactByEventType}
+par(mar=c(5,12,4,2))
+barplot(as.numeric(econImpactSummary$ECONIMPACT[11:1])/10^9, main="Economic impact by event type (in $bln)", horiz=TRUE, names.arg=econImpactSummary$EVTYPE[11:1], las = 1)
+```
+```{r}
+```
+
+Based on the graph above, the severe weather event type with the highest negative economic impact was `r econImpactSummary[1,1]`, resulting in $`r format(round( as.numeric(econImpactSummary[1,2])/1000000000,1), gig.mark=",", scientific=FALSE)`bln property and economic damages in the analyzed period (`r sprintf("%.1f %%", as.numeric(econImpactSummary[1,2])/sum(as.numeric(econImpactSummary[,2]))*100)` of all damages).
+
 
   [1]: https://www.ncdc.noaa.gov/stormevents/details.jsp?type=eventtype        "NCDC"
   [2]: http://www.ncdc.noaa.gov/stormevents/pd01016005curr.pdf                 "NWS Directive 10-1605"
+  [3]: https://www.ncdc.noaa.gov/stormevents/ftp.jsp                           "Storm Database"
